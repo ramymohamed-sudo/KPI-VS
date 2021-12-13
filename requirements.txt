@@ -1,0 +1,7 @@
+
+paho-mqtt
+pandas
+flask
+requests
+net-tools
+websocket

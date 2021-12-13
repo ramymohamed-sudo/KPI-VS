@@ -1,0 +1,203 @@
+
+import websocket
+import json
+import sys
+import pandas as pd
+import time
+from datetime import datetime, timedelta, date
+import sys
+import requests
+import pprint
+import os.path
+from os import path
+import math
+import csv
+
+
+""" timestamp column - issues 1- snr in cell 1 only not 2  2- ul_mcs in cell 2 only and sometimes it did not appear ?
+3- revise why the old code was always giving ul-mcs and dl-mcs ??> (which cell - maybe use js?) (maybe bkz the router
+was in use not the samsung phone )"""
+
+testDuration =  1*15*60 # 3600 seconds = one hour
+timeToSendFile = 300 #  300 seconds = 5 minutes
+timeToCollectKpis = 10 # 10 seconds
+timeDifference = timedelta(hours = 2)  # for CET time
+
+startDate = date.today()
+now = datetime.now()
+startTime = now.strftime("%H:%M:%S")
+startDatetime = now.strftime("%Y-%m-%d %H:%M:%S")
+print(startDatetime)
+kpiFileName = str(startDate)+'.csv'
+webSocketUri = "ws://9.161.154.25:9001/"
+msg = '{"message": "ue_get","stats":true}'    # ""                msg = '{"message": "stats"}'  ,"stats": true
+isDataReceived =  False
+kpiVsAuthorize = 'Basic bGwzdWM0RGF0YUNvbGxlY3RvclVzZXI6bGwzdWM0RGF0YUNvbGxlY3RvclVzZXI='
+kpiVsUrl = 'https://ingress.kpivs-5gsolutions.eu/5gsolutions/data-collector/'
+selecSetOfKpis = ['Timestamp','ue_id','Status','cell_id','dl_bitrate','ul_bitrate',
+                    'pucch1_snr','dl_mcs','ul_mcs']      # 'mssjjjs','hehw','whjjw' ran_ue_id for 5G     'ue_id'    'test',  'mssjjjs'
+# datfr = pd.read_csv('netw_kpis1.csv')
+
+""" Notification to KPI-VS with the start/stop of experiment"""
+def start_stop_exp(code='start'):
+    millis = int(round(time.time() * 1000))
+    json = {
+        "ll_id": 3,
+        "uc_id": 4,
+        "timestamp": millis,
+        "status": code,
+        "test_case_id":  1,
+        "tuid":  ""}
+    r = requests.post(kpiVsUrl+'notification',json=json,headers={'Authorization': kpiVsAuthorize})
+    x = r.json()
+    pprint.pprint(r.json())
+
+def send_KPIs(fileName='2020-11-19.csv'):
+    file = {'file':open(fileName,'rb')}
+    r = requests.post(
+           kpiVsUrl+'livinglab/LL3/usecase/UC4/uploadNet',
+           files=file,
+           headers={'Authorization': kpiVsAuthorize}
+           )
+    x = r.json()
+    pprint.pprint(r.json())
+
+""" TBD Later: send batch file to the BS - 1- authenticate 2- Service lte start ????? - for this, the NAN values
+in the pandas/csv file will be pre-processed before sending to the KPI server"""
+
+def initializedData():   # """ i think it is not needed as you type them static """
+     if len(sys.argv) >= 2:
+         print("arg",sys.argv[1])
+         global msg
+         global webSocketUri
+         webSocketUri = sys.argv[1]
+         msg = sys.argv[2]
+         print("input",msg)
+
+def on_message(ws, message):
+    global isDataReceived
+    if isDataReceived==True:
+        receivedData = json.loads(message)
+        parseData(jsonData=receivedData)
+        ws.close()
+    if isDataReceived==False:
+        isDataReceived = True
+        msg = '{"message":"ue_get","stats":true}'     # '{"message": "ue_get",}'  #   '{"message": "stats", "message_id": "id#1" }'
+        ws.send(msg)
+
+def parseData(synthetic=False,jsonData='',kpis=selecSetOfKpis[:]):        #
+    if synthetic==False:
+        # print("received in the method to parse Data:\n",jsonData)
+        df = pd.DataFrame.from_dict(jsonData)
+        dfUeList = df.from_dict(df.iloc[0:2]['ue_list'])          # df_rf_cpu.head()       we need index 0
+        ue_index_from_0_to_ = 0     # was 1 """__________________________ """
+        kpiFromBsForUe = dfUeList.iloc[ue_index_from_0_to_]['ue_list']           # iloc[1] for the ue_2, i.e., 5G
+        # print("********* kpiFromBsForUe['cells'][0].keys()",kpiFromBsForUe['cells'][0].keys())
+        for key in kpiFromBsForUe['cells'][0].keys():
+            kpiFromBsForUe[key] = kpiFromBsForUe['cells'][0][key]
+        del kpiFromBsForUe['cells']
+
+
+    kpiFromBsForUe = {} # to be deleted
+    kpiFromBsForUe = {key: None for key in selecSetOfKpis}
+    kpiFromBsForUe['cell_id'] = 2
+    kpiFromBsForUe['pucch1_snr'] = 11.2
+    kpiFromBsForUe['dl_mcs'] = 11.2
+    kpiFromBsForUe['ul_mcs'] = 11.2
+
+
+    currentDateAndTimeCET = datetime.now() + timeDifference
+    kpiFromBsForUe['Timestamp']  = currentDateAndTimeCET.strftime("%Y-%m-%d %H:%M:%S")
+    kpiFromBsForUe['Status']  = 'Active'
+    kpiFromBsForUe['ue_id'] = 2 # kpiFromBsForUe.pop('enb_ue_id') if kpiFromBsForUe.get('enb_ue_id',0) else kpiFromBsForUe.pop('ran_ue_id')
+    kpiFromBsForUe['dl_bitrate'] = 10.1 # kpiFromBsForUe['dl_bitrate']/(10**3)           # rate from bps to Mbps
+    kpiFromBsForUe['ul_bitrate'] = 10.1 # kpiFromBsForUe['ul_bitrate']/(10**3)
+
+    # kpisCopy = kpis.copy()
+    # [ kpis.remove(key) for key in kpisCopy if key not in kpiFromBsForUe.keys() ]      #       """ - error here """
+    # print("Selecte kpis to be sent to the KPI-VS are:\n",kpis)
+
+    slected_kpis_from_BS_dict_ue_row = [ kpiFromBsForUe[key] for key in  kpis]   # if key in kpiFromBsForUe.keys()  kpiFromBsForUe.keys()
+    print("slected_kpis_from_BS_dict_ue_row",slected_kpis_from_BS_dict_ue_row)
+
+    kpis[1] = 'UE ID'
+    kpis[2] = 'Status'
+    kpis[3] = 'Cell ID'
+    kpis[4] = 'Downlink bitrate'
+    kpis[5] = 'Uplink bitrate'
+    kpis[6] = 'PUCCH SNR'
+    kpis[7] = 'Downlink MCS'
+    kpis[8] = 'Uplink MCS'
+    # kpis[7] =
+    # kpiFromBsForUe['Cell ID'] = kpiFromBsForUe.pop('cell_id')
+    # kpiFromBsForUe['Downlink bitrate'] = kpiFromBsForUe.pop('dl_bitrate')
+    # kpiFromBsForUe['Uplink bitrate'] = kpiFromBsForUe.pop('ul_bitrate')
+    # kpiFromBsForUe['PUCCH SNR'] = kpiFromBsForUe.pop('pucch1_snr')
+    # kpiFromBsForUe['Downlink MCS'] = kpiFromBsForUe.pop('dl_mcs')
+    # kpiFromBsForUe['Uplink MCS'] = kpiFromBsForUe.pop('ul_mcs')
+
+    if not path.exists(kpiFileName):      # guru99.csv      'kpifile.csv'
+        print("File does not exists:")
+        with open(kpiFileName, 'x') as create_kpi_file:
+            kpi_writer = csv.writer(create_kpi_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            kpi_writer.writerow(kpis)
+    else:
+        print("File exists")
+        with open(kpiFileName, mode='a+') as kpi_file:
+            kpi_writer = csv.writer(kpi_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            kpi_writer.writerow(slected_kpis_from_BS_dict_ue_row)
+
+
+def on_error(ws, error):
+ print (error)
+
+def on_close(ws):
+ print ("\n### ---------closed ###")
+
+def on_open(ws):
+    print ("### opened ###")
+    global msg
+    ws.send(msg)
+
+def main():
+
+    # initializedData()
+    # ws = websocket.WebSocketApp(webSocketUri,on_message = on_message,
+    #     on_error = on_error,
+    #     on_close = on_close)
+    # ws.on_open = on_open
+
+    """ Collecting KPIs from the BS -       o/p is appended to the dataframe """
+    timeAfterFiveMins = datetime.now() + timedelta(seconds = timeToSendFile)
+    iter=1
+    while datetime.now() < timeAfterFiveMins:
+        print(f"collecting date for iter no {iter}")
+        # ws.run_forever()
+        # # # df = ws.on_message()
+        parseData(synthetic=True,kpis=selecSetOfKpis[:])      # to be deleted
+        iter+=1
+        time.sleep(timeToCollectKpis)
+
+
+if __name__ == "__main__":
+    print("Now the test is started ....")
+    start_stop_exp(code='start')
+    timeAfterOneHrs = datetime.now() + timedelta(seconds = testDuration)
+    mainiIter = 1
+    while datetime.now() < timeAfterOneHrs:
+    # maybe here delete the file after each main to send the new kpis
+        print("Main iteration loop number {}".format(mainiIter))
+        if path.exists(kpiFileName):      # guru99.csv      'kpifile.csv'
+            os.remove(kpiFileName)
+        main()
+        send_KPIs(fileName=kpiFileName)
+        mainiIter+=1
+
+
+    print("The test is now terminated <<<<<<<<<<")
+    start_stop_exp(code='stop')
+
+
+
+#
+
