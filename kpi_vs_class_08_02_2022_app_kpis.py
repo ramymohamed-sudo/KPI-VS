@@ -5,13 +5,31 @@ import pandas as pd
 import numpy as np
 import time
 from datetime import datetime, timedelta, date
-# import sys
+import sys
 import requests
 import pprint
 import os
 # import math
 import csv
 import websocketToBasestation
+
+# here, we need active data from the sensors - 
+sens_features = {"name": "cycle2-09",
+                 "batt_lvl": 71,
+                 "hrs_since_ful_chrg": 0.17349416666666664,
+                 "chrg_status": "NOT_PRESENT",
+                 "timestamp_ms": 1644581257627,
+                 "tx_pwr": 1.0,
+                 "iot_mode": "m",
+                 "cpu_temp": 63.7,
+                 "cpu_util": "2.6",
+                 "ram_util": 120.4,
+                 "disk_perc": 8.0,
+                 "wifi": True,
+                 "chrg_cycle":1}
+
+# df_sens_features = pd.DataFrame(sens_features, index=[0])
+# print(df_sens_features.head())
 
 
 class KpiVsObject():
@@ -121,6 +139,10 @@ class KpiVsObject():
             kpis_row_to_csv_file['Next servicing needed by'] = time_next_servc     # Date
             kpis_row_to_csv_file['Positioning accuracy'] =  1.3     # Float
             kpis_row_to_csv_file['Service availability'] = 99.1     # Float
+            # sens_features should be calculated/updated here before added to the kpis_row_to_csv_file
+            # maybe another subscriber collect data 
+            kpis_row_to_csv_file.update(sens_features) 
+
             def map_sens_id_netw_to_app_kpi(self):
                 pass
 
@@ -152,6 +174,8 @@ netw_kpis = ["Timestamp", "UE ID", "Status", "Cell ID", "Downlink bitrate",
         "Uplink bitrate", "PUCCH SNR", "Downlink MCS", "Uplink MCS"]
 app_kpis = ["Timestamp", "UE ID","Battery level", "Expected lifespan",
             "Next servicing needed by", "Positioning accuracy", "Service availability"]
+
+app_kpis = app_kpis + list(sens_features.keys())
 
 netw = False
 # kpi_vs = KpiVsObject(netw_kpis, netw=netw)

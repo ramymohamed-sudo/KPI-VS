@@ -150,7 +150,7 @@ def main():
             time.sleep(10)  # 10 seconds
         i += 1
 
-conn_open = False
+conn_open = False    # False
 if __name__ == "__main__":
     if conn_open:
         kpi_vs.code = 'stop'

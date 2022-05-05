@@ -10,7 +10,7 @@ node{
     stage('Preparation'){
         checkout scm
         sh 'git rev-parse --short HEAD > .git/commit-id'  
-        commit_id = readFile('.git/commit-id').trim()
+        commit_id = '7cae3cb' // readFile('.git/commit-id').trim()
     }
 
 
@@ -34,7 +34,7 @@ node{
         customImage.inside {
         sh 'ls'
         sh 'echo Hello KPI-Visualization System'
-        sh 'python3 ./kpi_vs_class_10_5.py'
+        sh 'python3 ./kpi_vs_class_netw_kpis_10_5.py'
 
         
     }
